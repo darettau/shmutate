@@ -3,15 +3,6 @@ set -euo pipefail
 
 RUN_CMD=${SHMUTATE_RUN:-bats test}
 
-# operator -> its flip, one mutant generated per direction
-OPS=(
-  -eq:-ne -ne:-eq -lt:-ge -ge:-lt -gt:-le -le:-gt
-  -z:-n -n:-z
-  "==:!=" "!=:=="
-  "&&:||" "||:&&"
-  true:false false:true
-)
-
 usage() {
   cat <<EOF
 shmutate - mutation testing for shell scripts and bats-core
@@ -26,31 +17,57 @@ lists the changes your tests failed to catch.
 EOF
 }
 
-# how many times sub occurs in s (non-overlapping)
-count_occ() {
-  local s=$1 sub=$2 n=0
-  while [[ $s == *"$sub"* ]]; do
-    s=${s#*"$sub"}
-    n=$((n + 1))
-  done
-  echo "$n"
+# find mutable operators in one file, skipping anything inside quotes or
+# comments. prints: file<TAB>line<TAB>col<TAB>len<TAB>from<TAB>to<TAB>src
+scan_file() {
+  awk -v fname="$1" '
+    BEGIN {
+      FLIP["-eq"]="-ne"; FLIP["-ne"]="-eq"
+      FLIP["-lt"]="-ge"; FLIP["-ge"]="-lt"
+      FLIP["-gt"]="-le"; FLIP["-le"]="-gt"
+      FLIP["-z"]="-n";   FLIP["-n"]="-z"
+      FLIP["=="]="!=";   FLIP["!="]="=="
+      FLIP["&&"]="||";   FLIP["||"]="&&"
+      FLIP["true"]="false"; FLIP["false"]="true"
+    }
+    # blank out quoted spans and trailing comments, keeping length so column
+    # offsets still line up with the original line
+    function mask(s,   i,ch,q,out) {
+      out=""; q=""
+      for (i = 1; i <= length(s); i++) {
+        ch = substr(s, i, 1)
+        if (q == "") {
+          if (ch == "#") { while (i <= length(s)) { out = out "."; i++ }; break }
+          else if (ch == "\047" || ch == "\042") { q = ch; out = out "." }
+          else out = out ch
+        } else {
+          if (ch == q) q = ""
+          out = out "."
+        }
+      }
+      return out
+    }
+    {
+      m = mask($0); L = length(m); i = 1
+      src = $0; sub(/^[ \t]+/, "", src)
+      while (i <= L) {
+        if (substr(m, i, 1) ~ /[ \t]/) { i++; continue }
+        st = i
+        while (i <= L && substr(m, i, 1) !~ /[ \t]/) i++
+        tok = substr(m, st, i - st)
+        if (tok in FLIP)
+          printf "%s\t%d\t%d\t%d\t%s\t%s\t%s\n", fname, NR, st, i - st, tok, FLIP[tok], src
+      }
+    }
+  ' "$1"
 }
 
-apply_mutation() {
-  local f=$1 ln=$2 occ=$3 from=$4 to=$5
-  # flip only the occ-th " from " on line ln; awk index() is 1-based
-  awk -v ln="$ln" -v occ="$occ" -v from=" $from " -v to=" $to " '
-    NR==ln {
-      s=$0; out=""; c=0; fl=length(from)
-      while ((p=index(s, from)) > 0) {
-        c++
-        out = out substr(s, 1, p-1) (c==occ ? to : from)
-        s = substr(s, p+fl)
-      }
-      print out s; next
-    }
+# rewrite line ln of file, replacing the operator at column st with to
+apply_at() {
+  awk -v ln="$2" -v st="$3" -v len="$4" -v to="$5" '
+    NR==ln { $0 = substr($0, 1, st-1) to substr($0, st+len) }
     { print }
-  ' "$f"
+  ' "$1"
 }
 
 files=()
@@ -78,22 +95,9 @@ if ! run_suite >/dev/null 2>&1; then
   exit 1
 fi
 
-# one descriptor per (file, line, occurrence, operator)
 muts=()
 for f in "${files[@]}"; do
-  n=0
-  while IFS= read -r line || [[ -n $line ]]; do
-    n=$((n + 1))
-    trimmed=${line#"${line%%[![:space:]]*}"}
-    case $trimmed in \#*) continue ;; esac
-    for pair in "${OPS[@]}"; do
-      from=${pair%%:*}; to=${pair#*:}
-      c=$(count_occ "$line" " $from ")
-      for ((i = 1; i <= c; i++)); do
-        muts+=("$f"$'\t'"$n"$'\t'"$i"$'\t'"$from"$'\t'"$to"$'\t'"$trimmed")
-      done
-    done
-  done <"$f"
+  while IFS= read -r rec; do muts+=("$rec"); done < <(scan_file "$f")
 done
 
 total=${#muts[@]}
@@ -121,9 +125,9 @@ printf 'shmutate: %d mutants across %s\n\n' "$total" "${files[*]}" >&2
 killed=0 survived=0
 survivors=()
 tmp=$(mktemp)
-for d in "${muts[@]}"; do
-  IFS=$'\t' read -r f ln occ from to src <<<"$d"
-  apply_mutation "$f" "$ln" "$occ" "$from" "$to" >"$tmp"
+for rec in "${muts[@]}"; do
+  IFS=$'\t' read -r f ln st len from to src <<<"$rec"
+  apply_at "$f" "$ln" "$st" "$len" "$to" >"$tmp"
   cp "$tmp" "$f"
   if run_suite >/dev/null 2>&1; then
     survived=$((survived + 1))

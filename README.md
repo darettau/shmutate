@@ -43,8 +43,9 @@ copied aside before anything runs, so a Ctrl+C won't leave a mutated file behind
 ## Operators
 
 Comparisons (`-eq`/`-ne`, `-lt`/`-ge`, `-gt`/`-le` and the rest), `-z`/`-n`,
-`==`/`!=`, `&&`/`||`, `true`/`false`, both ways. Matched as whole space-separated
-tokens, so `x=1` and words that contain `eq` are left alone.
+`==`/`!=`, `&&`/`||`, `true`/`false`, both ways. Matched as whole tokens, so
+`x=1` and words that contain `eq` are left alone, and operators inside quotes or
+comments are ignored.
 
 ## Options
 
@@ -57,7 +58,9 @@ Exits non-zero if anything survived, so CI can fail on it.
 
 ## Rough edges
 
-Only space-separated operators, so `a&&b` is skipped. Each mutant reruns the
+Quotes and comments are masked with a small scanner, not a real shell parser, so
+odd cases (escaped quotes, heredocs) can still fool it. Operators have to be
+their own token, so `a&&b` glued together is skipped. And every mutant reruns the
 whole suite, so runtime is roughly mutants times suite. Aim it at the files that
 matter.
 

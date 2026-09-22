@@ -27,6 +27,7 @@ scan_file() {
       FLIP["-gt"]="-le"; FLIP["-le"]="-gt"
       FLIP["-z"]="-n";   FLIP["-n"]="-z"
       FLIP["=="]="!=";   FLIP["!="]="=="
+      FLIP["<="]=">=";   FLIP[">="]="<="
       FLIP["&&"]="||";   FLIP["||"]="&&"
       FLIP["true"]="false"; FLIP["false"]="true"
     }

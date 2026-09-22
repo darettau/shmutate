@@ -43,7 +43,7 @@ copied aside before anything runs, so a Ctrl+C won't leave a mutated file behind
 ## Operators
 
 Comparisons (`-eq`/`-ne`, `-lt`/`-ge`, `-gt`/`-le` and the rest), `-z`/`-n`,
-`==`/`!=`, `&&`/`||`, `true`/`false`, both ways. Matched as whole tokens, so
+`==`/`!=`, `<=`/`>=`, `&&`/`||`, `true`/`false`, both ways. Matched as whole tokens, so
 `x=1` and words that contain `eq` are left alone, and operators inside quotes or
 comments are ignored.
 

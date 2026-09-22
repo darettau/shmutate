@@ -52,3 +52,22 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" != *"SURVIVED"* ]]
 }
+
+@test "arithmetic <= is found and mutated" {
+  local dir="$BATS_TEST_TMPDIR/a"
+  mkdir -p "$dir/test"
+  cat > "$dir/lib.sh" <<'SH'
+inrange() {
+  if (( $1 <= 10 )); then echo yes; else echo no; fi
+}
+SH
+  cat > "$dir/test/lib.bats" <<'SH'
+setup() { source "$BATS_TEST_DIRNAME/../lib.sh"; }
+@test "low"  { run inrange 5;  [ "$output" = yes ]; }
+@test "high" { run inrange 20; [ "$output" = no ]; }
+SH
+  cd "$dir"
+  run "$SHM" --run "bats test" lib.sh
+  [[ "$output" == *"1 mutants across"* ]]
+  [ "$status" -eq 0 ]
+}

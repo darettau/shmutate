@@ -2,21 +2,13 @@
 
 Mutation testing for shell scripts and [bats-core](https://github.com/bats-core/bats-core).
 
-Your tests are green. But would they catch a bug? `mutants` injects one small
-fault at a time into your shell code, runs your suite, and reports the mutations
-your tests **failed** to notice. Those survivors are the gaps a coverage
-percentage never shows you.
+Your suite is green. Does that actually mean the tests check anything? `mutants`
+breaks your code on purpose, one small change at a time, and reruns the suite.
+If a test fails, good, the mutation got killed. If everything still passes, that
+change slipped through and nothing was really testing it.
 
-## Why
-
-A passing test suite tells you the code works for the cases you thought of.
-Line coverage tells you a line ran — not that a test would fail if that line
-were wrong. Mutation testing closes that gap: if `mutants` can change `-eq` to
-`-ne`, or `&&` to `||`, and every test still passes, then nothing actually
-checked that behaviour.
-
-There is a lot of mutation tooling for other languages and almost none for
-shell. This is that tool, and it plugs straight into bats-core.
+I wrote this because a passing bats run kept giving me false confidence. Line
+coverage told me a line ran, not that a test would notice if it were wrong.
 
 ## Install
 
@@ -24,9 +16,9 @@ shell. This is that tool, and it plugs straight into bats-core.
 install -Dm755 mutants ~/.local/bin/mutants
 ```
 
-Requires `bash`, `awk`, and whatever runs your tests (e.g. `bats`).
+Needs bash, awk, and whatever runs your tests (bats, usually).
 
-## Quick start
+## Use
 
 ```sh
 mutants --run "bats test" src/myscript.sh
@@ -41,57 +33,43 @@ SURVIVED  src/myscript.sh:9  [ -lt -> -ge ]  if [ "$n" -lt -100 ]; then
 Score: 2/3 killed (66%)  - 1 survived
 ```
 
-Line 9 was mutated and every test still passed — nothing exercises that branch.
+That survivor on line 9 means the branch got mutated and not one test cared.
 
 ## How it works
 
-1. Run your suite once. If it is not already green, `mutants` stops — you can't
-   grade tests that are already failing.
-2. For each mutable operator in the target file, generate one mutant per
-   occurrence.
-3. For each mutant: apply the single change, run the suite, and record whether a
-   test failed (**killed**, good) or everything still passed (**survived**, a
-   gap). The file is restored after every run.
-4. Report the survivors and a kill score.
+Run the suite once (it has to start green). Then for every operator it knows,
+flip it one occurrence at a time and rerun. Killed = a test failed. Survived =
+they all passed. Originals are snapshotted up front and put back after each run,
+including if you Ctrl+C out mid-way.
 
-Only one mutation is live at a time, and the original files are snapshotted and
-restored on exit — including on `Ctrl+C`.
+## Operators
 
-## Mutation operators
-
-| From | To | | From | To |
-|---|---|---|---|---|
-| `-eq` | `-ne` | | `-z` | `-n` |
-| `-lt` | `-ge` | | `==` | `!=` |
-| `-gt` | `-le` | | `&&` | `\|\|` |
-| `-le` | `-gt` | | `true` | `false` |
-| `-ge` | `-lt` | | | |
-
-(and each pair's reverse). Operators are matched as whitespace-delimited tokens,
-so assignments like `x=1` and text inside words are left alone.
+`-eq`/`-ne`, `-lt`/`-ge`, `-gt`/`-le` and the other comparisons, `-z`/`-n`,
+`==`/`!=`, `&&`/`||`, `true`/`false`, both directions. They're matched as
+space-separated tokens, so `x=1` or a word that happens to contain `eq` is left
+alone.
 
 ## Options
 
 ```
---run CMD        test command per mutant (default: "bats test", or $MUTANTS_RUN)
---threshold N    minimum kill score % to exit 0 (default: 100)
--v, --verbose    also list killed mutants
--h, --help       help
+--run CMD        command to run per mutant (default "bats test", or $MUTANTS_RUN)
+--threshold N    kill score % needed for exit 0 (default 100)
+-v               also print the killed ones
+-h               help
 ```
 
-Exit status is non-zero when the score is below the threshold, so it gates CI:
+Exit is non-zero below the threshold, so you can fail CI on it:
 
 ```yaml
 - run: mutants --run "bats test" --threshold 90 src/*.sh
 ```
 
-## Limitations
+## Rough edges
 
-- Operators must be whitespace-delimited (the common shell style). Glued forms
-  like `a&&b` are not mutated.
-- Each mutant re-runs the whole suite, so runtime is `mutants x suite time`.
-  Point it at the files you care about.
+Operators have to be space-separated, the normal shell style; `a&&b` glued
+together won't be mutated. And every mutant reruns the whole suite, so it costs
+about `mutants x suite time`. Point it at the files that matter, not everything.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT.

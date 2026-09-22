@@ -53,15 +53,13 @@ alone.
 
 ```
 --run CMD        command to run per mutant (default "bats test", or $MUTANTS_RUN)
---threshold N    kill score % needed for exit 0 (default 100)
--v               also print the killed ones
 -h               help
 ```
 
-Exit is non-zero below the threshold, so you can fail CI on it:
+Exit is non-zero if anything survived, so you can fail CI on it:
 
 ```yaml
-- run: mutants --run "bats test" --threshold 90 src/*.sh
+- run: mutants --run "bats test" src/*.sh
 ```
 
 ## Rough edges

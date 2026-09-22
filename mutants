@@ -2,8 +2,6 @@
 set -euo pipefail
 
 RUN_CMD=${MUTANTS_RUN:-bats test}
-THRESHOLD=100
-VERBOSE=0
 
 # operator -> its flip, one mutant generated per direction
 OPS=(
@@ -24,8 +22,6 @@ Breaks your code on purpose, one operator at a time, reruns the suite, and
 lists the changes your tests failed to catch.
 
   --run CMD        command to run per mutant (default "bats test", \$MUTANTS_RUN)
-  --threshold N    kill score % needed to exit 0 (default 100)
-  -v, --verbose    also print killed mutants
   -h, --help       this help
 EOF
 }
@@ -62,9 +58,6 @@ while (($#)); do
   case $1 in
     --run) RUN_CMD=$2; shift 2 ;;
     --run=*) RUN_CMD=${1#*=}; shift ;;
-    --threshold) THRESHOLD=$2; shift 2 ;;
-    --threshold=*) THRESHOLD=${1#*=}; shift ;;
-    -v | --verbose) VERBOSE=1; shift ;;
     -h | --help) usage; exit 0 ;;
     --) shift; files+=("$@"); break ;;
     -*) echo "mutants: unknown option: $1" >&2; exit 2 ;;
@@ -137,7 +130,6 @@ for d in "${muts[@]}"; do
     survivors+=("$(printf 'SURVIVED  %s:%s  [ %s -> %s ]  %s' "$f" "$ln" "$from" "$to" "$src")")
   else
     killed=$((killed + 1))
-    ((VERBOSE)) && echo "KILLED    $f:$ln  [ $from -> $to ]"
   fi
   cp "${saved[$f]}" "$f"
 done
@@ -151,4 +143,4 @@ printf '\nScore: %d/%d killed (%d%%)' "$killed" "$total" "$score"
 ((survived)) && printf '  - %d survived' "$survived"
 echo
 
-((score >= THRESHOLD))
+((survived == 0))

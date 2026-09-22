@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUN_CMD=${MUTANTS_RUN:-bats test}
+THRESHOLD=100
+VERBOSE=0
+
+OPS=(
+  "-eq:-ne" "-ne:-eq"
+  "-lt:-ge" "-ge:-lt"
+  "-gt:-le" "-le:-gt"
+  "-z:-n" "-n:-z"
+  "==:!=" "!=:=="
+  "&&:||" "||:&&"
+  "true:false" "false:true"
+)
+
+usage() {
+  cat <<EOF
+mutants - mutation testing for shell scripts and bats-core
+
+  mutants [options] <file>...
+
+Injects one small fault at a time into each target file, runs your test
+suite, and reports which mutations your tests failed to catch (survivors).
+
+Options:
+  --run CMD          test command to run per mutant (default: "bats test")
+  --threshold N      minimum kill score %% to exit 0 (default: 100)
+  -v, --verbose      also list killed mutants
+  -h, --help         show this help
+
+Environment:
+  MUTANTS_RUN        same as --run
+
+Exit status is non-zero if the kill score is below the threshold.
+EOF
+}
+
+count_occ() {
+  local s=$1 sub=$2 c=0
+  while [[ $s == *"$sub"* ]]; do
+    s=${s#*"$sub"}
+    c=$((c + 1))
+  done
+  printf '%s' "$c"
+}
+
+apply_mutation() {
+  local f=$1 ln=$2 occ=$3 from=$4 to=$5
+  awk -v ln="$ln" -v occ="$occ" -v from=" $from " -v to=" $to " '
+    NR==ln {
+      s=$0; res=""; c=0; fl=length(from)
+      while ((p=index(s, from)) > 0) {
+        c++
+        res = res substr(s, 1, p-1) (c==occ ? to : from)
+        s = substr(s, p+fl)
+      }
+      print res s
+      next
+    }
+    { print }
+  ' "$f"
+}
+
+files=()
+while (($#)); do
+  case $1 in
+  --run) RUN_CMD=$2; shift 2 ;;
+  --run=*) RUN_CMD=${1#*=}; shift ;;
+  --threshold) THRESHOLD=$2; shift 2 ;;
+  --threshold=*) THRESHOLD=${1#*=}; shift ;;
+  -v | --verbose) VERBOSE=1; shift ;;
+  -h | --help) usage; exit 0 ;;
+  --) shift; files+=("$@"); break ;;
+  -*) printf 'mutants: unknown option: %s\n' "$1" >&2; exit 2 ;;
+  *) files+=("$1"); shift ;;
+  esac
+done
+
+((${#files[@]})) || { usage >&2; exit 2; }
+
+run_suite() { eval "$RUN_CMD"; }
+
+for f in "${files[@]}"; do
+  [[ -f $f ]] || { printf 'mutants: no such file: %s\n' "$f" >&2; exit 1; }
+done
+
+printf 'mutants: checking baseline suite...\n' >&2
+if ! run_suite >/dev/null 2>&1; then
+  printf 'mutants: baseline suite is failing; fix your tests before mutating\n' >&2
+  exit 1
+fi
+
+descriptors=()
+for f in "${files[@]}"; do
+  ln=0
+  while IFS= read -r line || [[ -n $line ]]; do
+    ln=$((ln + 1))
+    trimmed=${line#"${line%%[![:space:]]*}"}
+    [[ $trimmed == \#* ]] && continue
+    for pair in "${OPS[@]}"; do
+      from=${pair%%:*}; to=${pair#*:}
+      cnt=$(count_occ "$line" " $from ")
+      for ((i = 1; i <= cnt; i++)); do
+        descriptors+=("$f"$'\t'"$ln"$'\t'"$i"$'\t'"$from"$'\t'"$to"$'\t'"$trimmed")
+      done
+    done
+  done <"$f"
+done
+
+total=${#descriptors[@]}
+if ((total == 0)); then
+  printf 'mutants: no mutable operators found in: %s\n' "${files[*]}" >&2
+  exit 0
+fi
+
+snapshot=$(mktemp -d)
+declare -A saved=()
+idx=0
+for f in "${files[@]}"; do
+  cp "$f" "$snapshot/$idx"
+  saved[$f]=$snapshot/$idx
+  idx=$((idx + 1))
+done
+
+restore_all() {
+  local g
+  for g in "${!saved[@]}"; do
+    cp "${saved[$g]}" "$g" 2>/dev/null || true
+  done
+}
+cleanup() { restore_all; rm -rf "$snapshot"; }
+trap cleanup EXIT INT TERM
+
+printf 'mutants: %d mutants across %s\n\n' "$total" "${files[*]}" >&2
+
+killed=0
+survived=0
+survivors=()
+tmp=$(mktemp)
+for desc in "${descriptors[@]}"; do
+  IFS=$'\t' read -r f ln occ from to src <<<"$desc"
+  apply_mutation "$f" "$ln" "$occ" "$from" "$to" >"$tmp"
+  cp "$tmp" "$f"
+  if run_suite >/dev/null 2>&1; then
+    survived=$((survived + 1))
+    survivors+=("$(printf 'SURVIVED  %s:%s  [ %s -> %s ]  %s' "$f" "$ln" "$from" "$to" "$src")")
+  else
+    killed=$((killed + 1))
+    ((VERBOSE)) && printf 'KILLED    %s:%s  [ %s -> %s ]\n' "$f" "$ln" "$from" "$to"
+  fi
+  cp "${saved[$f]}" "$f"
+done
+rm -f "$tmp"
+
+printf '\n'
+for s in "${survivors[@]}"; do printf '%s\n' "$s"; done
+
+score=$((killed * 100 / total))
+printf '\nScore: %d/%d killed (%d%%)' "$killed" "$total" "$score"
+((survived)) && printf '  - %d survived' "$survived"
+printf '\n'
+
+((score >= THRESHOLD))

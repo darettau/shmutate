@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RUN_CMD=${MUTANTS_RUN:-bats test}
+RUN_CMD=${SHMUTATE_RUN:-bats test}
 
 # operator -> its flip, one mutant generated per direction
 OPS=(
@@ -14,14 +14,14 @@ OPS=(
 
 usage() {
   cat <<EOF
-mutants - mutation testing for shell scripts and bats-core
+shmutate - mutation testing for shell scripts and bats-core
 
-  mutants [options] <file>...
+  shmutate [options] <file>...
 
 Breaks your code on purpose, one operator at a time, reruns the suite, and
 lists the changes your tests failed to catch.
 
-  --run CMD        command to run per mutant (default "bats test", \$MUTANTS_RUN)
+  --run CMD        command to run per mutant (default "bats test", \$SHMUTATE_RUN)
   -h, --help       this help
 EOF
 }
@@ -60,7 +60,7 @@ while (($#)); do
     --run=*) RUN_CMD=${1#*=}; shift ;;
     -h | --help) usage; exit 0 ;;
     --) shift; files+=("$@"); break ;;
-    -*) echo "mutants: unknown option: $1" >&2; exit 2 ;;
+    -*) echo "shmutate: unknown option: $1" >&2; exit 2 ;;
     *) files+=("$1"); shift ;;
   esac
 done
@@ -69,12 +69,12 @@ done
 run_suite() { eval "$RUN_CMD"; }
 
 for f in "${files[@]}"; do
-  [[ -f $f ]] || { echo "mutants: no such file: $f" >&2; exit 1; }
+  [[ -f $f ]] || { echo "shmutate: no such file: $f" >&2; exit 1; }
 done
 
-echo "mutants: checking baseline suite..." >&2
+echo "shmutate: checking baseline suite..." >&2
 if ! run_suite >/dev/null 2>&1; then
-  echo "mutants: baseline suite is failing; fix your tests before mutating" >&2
+  echo "shmutate: baseline suite is failing; fix your tests before mutating" >&2
   exit 1
 fi
 
@@ -98,7 +98,7 @@ done
 
 total=${#muts[@]}
 if ((total == 0)); then
-  echo "mutants: no mutable operators found in: ${files[*]}" >&2
+  echo "shmutate: no mutable operators found in: ${files[*]}" >&2
   exit 0
 fi
 
@@ -116,7 +116,7 @@ restore_all() {
 }
 trap 'restore_all; rm -rf "$bak"' EXIT INT TERM
 
-printf 'mutants: %d mutants across %s\n\n' "$total" "${files[*]}" >&2
+printf 'shmutate: %d mutants across %s\n\n' "$total" "${files[*]}" >&2
 
 killed=0 survived=0
 survivors=()

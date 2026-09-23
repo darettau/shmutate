@@ -2,70 +2,51 @@
 
 [![CI](https://github.com/darettau/shmutate/actions/workflows/ci.yml/badge.svg)](https://github.com/darettau/shmutate/actions/workflows/ci.yml)
 
-Mutation testing for shell, aimed at [bats-core](https://github.com/bats-core/bats-core) suites.
+Mutation testing for shell, for [bats](https://github.com/bats-core/bats-core)
+suites. It flips one operator in your code, reruns your tests, and restores the
+file. If the tests still pass, nothing was covering that change.
 
-It changes one operator in your script (say `-eq` to `-ne`), runs your tests,
-then puts the file back. If the tests still pass, nothing was covering that
-change. Those are what it reports.
+```
+$ shmutate --run "bats test" retry.sh
+shmutate: checking baseline suite...
+shmutate: 6 mutants across retry.sh
 
-I made it because green bats runs were lying to me. Coverage said a line ran,
-not that a test would catch it being wrong.
+SURVIVED  retry.sh:12  [ -lt -> -ge ]  if [ "$tries" -lt "$max" ]; then
 
-## Install
+Score: 5/6 killed (83%)  - 1 survived
+```
 
-```sh
+Line 12 could be wrong and every test would still pass. I wrote this after a few
+too many green bats runs gave me false confidence.
+
+## install
+
+```
 install -Dm755 shmutate ~/.local/bin/shmutate
 ```
 
-Needs bash and awk. Tests run through whatever you pass to `--run`, bats by default.
+Needs bash and awk. Tests run through whatever you pass to `--run`, `bats test`
+by default.
 
-## Use
+## how it works
 
-```sh
-shmutate --run "bats test" src/myscript.sh
-```
-
-```
-shmutate: checking baseline suite...
-shmutate: 3 mutants across src/myscript.sh
-
-SURVIVED  src/myscript.sh:9  [ -lt -> -ge ]  if [ "$n" -lt -100 ]; then
-
-Score: 2/3 killed (66%)  - 1 survived
-```
-
-Line 9 got mutated and no test noticed.
-
-## How it works
-
-The suite has to pass first. Then for each operator it flips one occurrence,
-reruns, and records whether a test failed (killed) or not (survived). Files are
-copied aside before anything runs, so a Ctrl+C won't leave a mutated file behind.
-
-## Operators
-
-Comparisons (`-eq`/`-ne`, `-lt`/`-ge`, `-gt`/`-le` and the rest), `-z`/`-n`,
-`==`/`!=`, `<=`/`>=`, `&&`/`||`, `true`/`false`, both ways. Matched as whole tokens, so
-`x=1` and words that contain `eq` are left alone, and operators inside quotes or
-comments are ignored.
-
-## Options
+The suite has to pass first. Then for each operator it flips one at a time and
+reruns. A failing test means the mutant was caught; if nothing fails, it
+survived. Operators covered:
 
 ```
---run CMD    how to run the suite per mutant (default "bats test", or $SHMUTATE_RUN)
--h           help
+-eq -ne   -lt -ge   -gt -le   -z -n
+==  !=    <=  >=     &&  ||     true false
 ```
 
-Exits non-zero if anything survived, so CI can fail on it.
+and their reverses. Operators inside strings and comments are skipped. Exit is
+non-zero when anything survives, so CI can fail on it.
 
-## Rough edges
+## notes
 
 Quotes and comments are masked with a small scanner, not a real shell parser, so
-odd cases (escaped quotes, heredocs) can still fool it. Operators have to be
-their own token, so `a&&b` glued together is skipped. And every mutant reruns the
-whole suite, so runtime is roughly mutants times suite. Aim it at the files that
+heredocs and escaped quotes can still fool it. Glued operators like `a&&b` are
+left alone. Every mutant reruns the whole suite, so point it at the files that
 matter.
 
-## License
-
-MIT.
+MIT

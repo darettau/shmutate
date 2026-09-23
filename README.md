@@ -2,22 +2,15 @@
 
 [![CI](https://github.com/darettau/shmutate/actions/workflows/ci.yml/badge.svg)](https://github.com/darettau/shmutate/actions/workflows/ci.yml)
 
+![demo](docs/demo.png)
+
 Mutation testing for shell, for [bats](https://github.com/bats-core/bats-core)
 suites. It flips one operator in your code, reruns your tests, and restores the
 file. If the tests still pass, nothing was covering that change.
 
-```
-$ shmutate --run "bats test" retry.sh
-shmutate: checking baseline suite...
-shmutate: 6 mutants across retry.sh
-
-SURVIVED  retry.sh:12  [ -lt -> -ge ]  if [ "$tries" -lt "$max" ]; then
-
-Score: 5/6 killed (83%)  - 1 survived
-```
-
-Line 12 could be wrong and every test would still pass. I wrote this after a few
-too many green bats runs gave me false confidence.
+The survivor in that run is a real gap: the line could be wrong and every test
+would still pass. I wrote this after a few too many green bats runs gave me false
+confidence.
 
 ## install
 
@@ -49,4 +42,6 @@ heredocs and escaped quotes can still fool it. Glued operators like `a&&b` are
 left alone. Every mutant reruns the whole suite, so point it at the files that
 matter.
 
-MIT
+## license
+
+MIT, see [LICENSE](LICENSE).

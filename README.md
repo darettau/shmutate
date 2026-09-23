@@ -1,6 +1,6 @@
 # shmutate
 
-[![CI](https://github.com/darettau/shmutate/actions/workflows/ci.yml/badge.svg)](https://github.com/darettau/shmutate/actions/workflows/ci.yml)
+[![CI](https://github.com/darettau/shmutate/actions/workflows/ci.yml/badge.svg)](https://github.com/darettau/shmutate/actions/workflows/ci.yml) [![license](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ![demo](docs/demo.png)
 

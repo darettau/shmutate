@@ -121,7 +121,7 @@ restore_all() {
 }
 trap 'restore_all; rm -rf "$bak"' EXIT INT TERM
 
-printf 'shmutate: %d mutants across %s\n\n' "$total" "${files[*]}" >&2
+printf 'shmutate: %d mutants across %s\n' "$total" "${files[*]}" >&2
 
 killed=0 survived=0
 survivors=()

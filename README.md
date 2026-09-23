@@ -1,5 +1,7 @@
 # shmutate
 
+[![CI](https://github.com/darettau/shmutate/actions/workflows/ci.yml/badge.svg)](https://github.com/darettau/shmutate/actions/workflows/ci.yml)
+
 Mutation testing for shell, aimed at [bats-core](https://github.com/bats-core/bats-core) suites.
 
 It changes one operator in your script (say `-eq` to `-ne`), runs your tests,
